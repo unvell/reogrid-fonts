@@ -36,8 +36,11 @@ import { loadNotoSansSC } from '@reogrid/font-sc';
 registerPdfFont('zh-CN', loadNotoSansSC);   // wire it up (sync)
 await preloadPdfFont('zh-CN');              // once, at app start
 
-grid.saveAsPdf({ font: 'zh-CN', filename: 'report.pdf' });
+grid.saveAsPdf({ locale: 'zh-CN', filename: 'report.pdf' });
 ```
+
+> Requires **`@reogrid/pro` 1.5.0 or newer** — `registerPdfFont` and the
+> `locale` option landed in 1.5.0.
 
 Export stays synchronous, so the font has to be resolved beforehand — that is
 what `preloadPdfFont` is for. The bytes sit behind a dynamic import, so bundlers
