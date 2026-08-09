@@ -91,6 +91,9 @@ export declare function ${font.export}(): Promise<Uint8Array>;
 export default ${font.export};
 `;
 
+/** Version stamped into every generated package.json. Bump to republish. */
+const PKG_VERSION = '1.0.1';
+
 const README = (font, stats) => `# ${font.pkg}
 
 A subset of **${font.family}** packaged for [ReoGrid](https://web.reogrid.net)
@@ -107,8 +110,11 @@ import { ${font.export} } from '${font.pkg}';
 registerPdfFont('${font.tag}', ${font.export});   // wire it up
 await preloadPdfFont('${font.tag}');              // once, at app start
 
-grid.saveAsPdf({ font: '${font.tag}', filename: 'report.pdf' });
+grid.saveAsPdf({ locale: '${font.tag}', filename: 'report.pdf' });
 \`\`\`
+
+> Requires **\`@reogrid/pro\` 1.5.0 or newer** — \`registerPdfFont\` and the
+> \`locale\` option landed in 1.5.0.
 
 The bytes sit behind a dynamic import, so bundlers keep them in their own chunk:
 an app that never exports a PDF never downloads them.
@@ -165,7 +171,7 @@ async function buildOne(font) {
       `${JSON.stringify(
         {
           name: font.pkg,
-          version: '1.0.0',
+          version: PKG_VERSION,
           description: `${font.family} subset for ReoGrid PDF export (${font.tag}).`,
           type: 'module',
           main: './index.js',
