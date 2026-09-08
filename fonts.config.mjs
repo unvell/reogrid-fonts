@@ -89,10 +89,19 @@ export const FONTS = [
   },
 ];
 
-/** ASCII is added to every subset — sheets always carry digits and punctuation. */
-export const ALWAYS_INCLUDE = Array.from({ length: 0x7f - 0x20 }, (_, i) =>
-  String.fromCharCode(0x20 + i),
-).join('');
+/**
+ * Added to every subset, on top of the encoding's own repertoire.
+ *
+ * ASCII, because sheets always carry digits and punctuation. And the half-width
+ * currency signs, because the legacy encodings only have the *fullwidth* forms
+ * (JIS X 0208 has ￥ U+FFE5, not ¥ U+00A5) while spreadsheet number formats are
+ * written with the half-width ones — Excel's built-in Japanese currency format
+ * is `[$¥]#,##0`. A money column whose currency sign silently disappears is not
+ * a cosmetic loss on an invoice.
+ */
+export const ALWAYS_INCLUDE =
+  Array.from({ length: 0x7f - 0x20 }, (_, i) => String.fromCharCode(0x20 + i)).join('') +
+  '¥₩€£¢';
 
 /**
  * Trail bytes to try, per encoding. This is not cosmetic — it decides which

@@ -110,10 +110,10 @@ function readWeight(buf) {
 // A few characters per language that must render, spelled out so a regression
 // is legible in the failure message rather than a bare count.
 const SPOT_CHECKS = {
-  'zh-CN': '销售额报表客户账户资产负债发货订单',
-  'zh-TW': '銷售額報表客戶帳戶資產負債發貨訂單',
-  ja: '請求書合計金額御中株式会社',
-  ko: '청구서합계금액주식회사',
+  'zh-CN': '销售额报表客户账户资产负债发货订单¥',
+  'zh-TW': '銷售額報表客戶帳戶資產負債發貨訂單¥',
+  ja: '請求書合計金額御中株式会社¥',
+  ko: '청구서합계금액주식회사₩',
 };
 
 let failed = 0;

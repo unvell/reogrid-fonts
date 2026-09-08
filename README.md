@@ -4,10 +4,10 @@ Subsetted CJK font packages for [ReoGrid](https://web.reogrid.net) PDF export.
 
 | Package | Tag | Characters | Package | Over the wire | vs upstream |
 |---|---|---|---|---|---|
-| `@reogrid/font-sc` | `zh-CN` | 7,709 | 2,376 KB | ~1,435 KB | 1/12 |
-| `@reogrid/font-tc` | `zh-TW` | 13,682 | 4,758 KB | ~2,686 KB | 1/4 |
-| `@reogrid/font-jp` | `ja` | 6,974 | 2,557 KB | ~1,487 KB | 1/6 |
-| `@reogrid/font-kr` | `ko` | 3,196 | 566 KB | ~280 KB | 1/36 |
+| `@reogrid/font-sc` | `zh-CN` | 7,714 | 2,377 KB | ~1,436 KB | 1/12 |
+| `@reogrid/font-tc` | `zh-TW` | 13,687 | 4,758 KB | ~2,686 KB | 1/4 |
+| `@reogrid/font-jp` | `ja` | 6,979 | 2,557 KB | ~1,487 KB | 1/6 |
+| `@reogrid/font-kr` | `ko` | 3,201 | 566 KB | ~277 KB | 1/37 |
 
 Every package is a **static Regular (wght 400)** instance, not the upstream
 variable font — see [Weight](#weight).
