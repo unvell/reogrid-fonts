@@ -15,6 +15,28 @@ export const upstreamUrl = (dir, file) =>
   `https://cdn.jsdelivr.net/gh/google/fonts@${GOOGLE_FONTS_SHA}/ofl/${dir}/${file}`;
 
 /**
+ * The weight to pin the variable font to, as a `wght` axis coordinate.
+ *
+ * This is **not** cosmetic — it decides whether the packages are usable at all.
+ * Upstream ships `NotoSansXX[wght].ttf`, whose `fvar` declares
+ * `min 100 / default 100 / max 900`. In a variable font the `glyf` table holds
+ * the outlines *at the default coordinate* and `gvar` holds the deltas, so a
+ * consumer that does not apply variations renders **Thin** — which is exactly
+ * what ReoGrid's PDF export does: it embeds glyph outlines, no more. Documents
+ * came out uniformly hairline, and the synthetic bold (a 4% outline stroke in
+ * `worksheetPdf.ts`) had nothing solid to thicken.
+ *
+ * Pinning here bakes the 400 outlines into `glyf` and drops `fvar`/`gvar`
+ * entirely, so the packaged font is a plain static Regular.
+ *
+ * Note: harfbuzz does not rewrite the `name` table when instancing, so the
+ * packaged font still reports `NotoSansJP-Thin` as its PostScript name and a
+ * PDF's `/BaseFont` will say so too. The outlines are 400 — verify with
+ * `usWeightClass` (`scripts/verify.mjs`), not with the name.
+ */
+export const WEIGHT = 400;
+
+/**
  * Character sets are generated from the classic national encodings rather than
  * hand-listed: they are exactly the "everyday business document" repertoires,
  * they are stable, and a reviewer can re-derive them instead of trusting a blob.

@@ -4,10 +4,13 @@ Subsetted CJK font packages for [ReoGrid](https://web.reogrid.net) PDF export.
 
 | Package | Tag | Characters | Package | Over the wire | vs upstream |
 |---|---|---|---|---|---|
-| `@reogrid/font-sc` | `zh-CN` | 7,709 | 4,006 KB | ~2,593 KB | 1/7 |
-| `@reogrid/font-tc` | `zh-TW` | 13,682 | 7,993 KB | ~4,840 KB | 1/2 |
-| `@reogrid/font-jp` | `ja` | 6,974 | 4,294 KB | ~2,673 KB | 1/4 |
-| `@reogrid/font-kr` | `ko` | 3,196 | 951 KB | ~494 KB | 1/21 |
+| `@reogrid/font-sc` | `zh-CN` | 7,709 | 2,376 KB | ~1,435 KB | 1/12 |
+| `@reogrid/font-tc` | `zh-TW` | 13,682 | 4,758 KB | ~2,686 KB | 1/4 |
+| `@reogrid/font-jp` | `ja` | 6,974 | 2,557 KB | ~1,487 KB | 1/6 |
+| `@reogrid/font-kr` | `ko` | 3,196 | 566 KB | ~280 KB | 1/36 |
+
+Every package is a **static Regular (wght 400)** instance, not the upstream
+variable font — see [Weight](#weight).
 
 ## Why this exists
 
@@ -45,6 +48,32 @@ grid.saveAsPdf({ locale: 'zh-CN', filename: 'report.pdf' });
 Export stays synchronous, so the font has to be resolved beforehand — that is
 what `preloadPdfFont` is for. The bytes sit behind a dynamic import, so bundlers
 give them their own chunk: an app that never exports a PDF never downloads them.
+
+## Weight
+
+Upstream ships one variable file per language, `NotoSansXX[wght].ttf`, and its
+`fvar` reads `min 100 / default 100 / max 900`. That default matters more than it
+looks: a variable font stores its outlines in `glyf` **at the default coordinate**
+and keeps the deltas in `gvar`, so anything that embeds `glyf` without applying
+variations draws the font at wght 100 — Thin.
+
+ReoGrid's PDF export embeds glyph outlines and nothing else, so an un-instanced
+subset produced uniformly hairline documents, and the synthetic bold (a 4%
+outline stroke) had no substance to thicken. The build therefore pins the axis:
+
+```js
+await subsetFont(source, text, { targetFormat: 'truetype', variationAxes: { wght: WEIGHT } });
+```
+
+The result is a plain static font — `fvar`, `gvar`, `avar`, `HVAR` and `STAT` are
+all dropped, which is also why the packages are roughly half the size they were
+before 1.1.0.
+
+One wrinkle: harfbuzz does not rewrite the `name` table when instancing, so the
+font still calls itself `NotoSansJP-Thin`, and a PDF's `/BaseFont` will repeat
+that name. It is a label, not the outlines. `npm run verify` checks
+`OS/2.usWeightClass` and the absence of `fvar` instead, and fails the build if a
+package is ever shipped un-instanced again.
 
 ## What is in a subset
 

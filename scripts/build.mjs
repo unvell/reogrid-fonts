@@ -19,7 +19,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { brotliCompressSync } from 'node:zlib';
 import subsetFont from 'subset-font';
-import { FONTS, GOOGLE_FONTS_SHA, upstreamUrl, charsetFor } from '../fonts.config.mjs';
+import { FONTS, GOOGLE_FONTS_SHA, WEIGHT, upstreamUrl, charsetFor } from '../fonts.config.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CACHE = join(ROOT, '.cache');
@@ -92,7 +92,7 @@ export default ${font.export};
 `;
 
 /** Version stamped into every generated package.json. Bump to republish. */
-const PKG_VERSION = '1.0.1';
+const PKG_VERSION = '1.1.0';
 
 const README = (font, stats) => `# ${font.pkg}
 
@@ -152,7 +152,10 @@ async function buildOne(font) {
   );
 
   const text = charsetFor(font.charset);
-  const subset = await subsetFont(source, text, { targetFormat: 'truetype' });
+  const subset = await subsetFont(source, text, {
+    targetFormat: 'truetype',
+    variationAxes: { wght: WEIGHT },
+  });
   const base64 = Buffer.from(subset).toString('base64');
   const wire = brotliCompressSync(Buffer.from(base64)).length;
 
