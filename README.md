@@ -2,15 +2,18 @@
 
 Subsetted CJK font packages for [ReoGrid](https://web.reogrid.net) PDF export.
 
-| Package | Tag | Characters | Package | Over the wire | vs upstream |
-|---|---|---|---|---|---|
-| `@reogrid/font-sc` | `zh-CN` | 7,714 | 2,377 KB | ~1,436 KB | 1/12 |
-| `@reogrid/font-tc` | `zh-TW` | 13,687 | 4,758 KB | ~2,686 KB | 1/4 |
-| `@reogrid/font-jp` | `ja` | 6,979 | 2,557 KB | ~1,487 KB | 1/6 |
-| `@reogrid/font-kr` | `ko` | 3,201 | 566 KB | ~277 KB | 1/37 |
+Each package ships three **static** faces — Thin (100), Regular (400) and Bold
+(700) — instanced from the upstream variable font. See [Weights](#weights).
 
-Every package is a **static Regular (wght 400)** instance, not the upstream
-variable font — see [Weight](#weight).
+| Package | Tag | Characters | Per face | Upstream | vs upstream |
+|---|---|---|---|---|---|
+| `@reogrid/font-sc` | `zh-CN` | 7,714 | ~2,377 KB | 16.95 MB | 1/7 |
+| `@reogrid/font-tc` | `zh-TW` | 13,687 | ~4,756 KB | 11.39 MB | 1/2 |
+| `@reogrid/font-jp` | `ja` | 6,979 | ~2,558 KB | 9.15 MB | 1/4 |
+| `@reogrid/font-kr` | `ko` | 3,201 | ~567 KB | 9.93 MB | 1/18 |
+
+A face is only downloaded when it is used, so registering all three does not
+mean fetching all three.
 
 ## Why this exists
 
@@ -34,22 +37,30 @@ npm install @reogrid/font-sc
 
 ```ts
 import { registerPdfFont, preloadPdfFont } from '@reogrid/pro';
-import { loadNotoSansSC } from '@reogrid/font-sc';
+import { notoSansSC } from '@reogrid/font-sc';
 
-registerPdfFont('zh-CN', loadNotoSansSC);   // wire it up (sync)
-await preloadPdfFont('zh-CN');              // once, at app start
+registerPdfFont('zh-CN', notoSansSC);   // all three weights (sync)
+await preloadPdfFont('zh-CN');          // once, at app start
 
 grid.saveAsPdf({ locale: 'zh-CN', filename: 'report.pdf' });
 ```
 
-> Requires **`@reogrid/pro` 1.5.0 or newer** — `registerPdfFont` and the
-> `locale` option landed in 1.5.0.
+Bold cells print with real Bold outlines. To keep the download to one face,
+register just that one — `registerPdfFont('zh-CN', loadNotoSansSCRegular)`.
+
+> The per-weight form requires **`@reogrid/pro` 1.6.0 or newer**. `1.5.0`
+> accepts a single loader: `registerPdfFont('zh-CN', loadNotoSansSC)` still
+> works and registers Regular alone.
 
 Export stays synchronous, so the font has to be resolved beforehand — that is
-what `preloadPdfFont` is for. The bytes sit behind a dynamic import, so bundlers
-give them their own chunk: an app that never exports a PDF never downloads them.
+what `preloadPdfFont` is for. Each face is a `.ttf` next to the package's
+`index.js`, resolved through `new URL(…, import.meta.url)`, so bundlers emit it
+as an asset rather than inlining it: an app that never exports a PDF never
+downloads a font. The same files are served by jsDelivr straight from the
+published package, which is where ReoGrid's built-in `locale` fonts come from
+when nothing has been registered.
 
-## Weight
+## Weights
 
 Upstream ships one variable file per language, `NotoSansXX[wght].ttf`, and its
 `fvar` reads `min 100 / default 100 / max 900`. That default matters more than it
@@ -59,21 +70,29 @@ variations draws the font at wght 100 — Thin.
 
 ReoGrid's PDF export embeds glyph outlines and nothing else, so an un-instanced
 subset produced uniformly hairline documents, and the synthetic bold (a 4%
-outline stroke) had no substance to thicken. The build therefore pins the axis:
+outline stroke) had no substance to thicken. The build therefore pins the axis,
+once per weight:
 
 ```js
-await subsetFont(source, text, { targetFormat: 'truetype', variationAxes: { wght: WEIGHT } });
+await subsetFont(source, text, { targetFormat: 'truetype', variationAxes: { wght } });
 ```
 
-The result is a plain static font — `fvar`, `gvar`, `avar`, `HVAR` and `STAT` are
-all dropped, which is also why the packages are roughly half the size they were
-before 1.1.0.
+Each result is a plain static font — `fvar`, `gvar`, `avar`, `HVAR` and `STAT`
+are all dropped. Three of them, at 100 / 400 / 700, is what lets a PDF use a
+real Bold face for bold cells rather than stroking the outline.
 
-One wrinkle: harfbuzz does not rewrite the `name` table when instancing, so the
-font still calls itself `NotoSansJP-Thin`, and a PDF's `/BaseFont` will repeat
-that name. It is a label, not the outlines. `npm run verify` checks
-`OS/2.usWeightClass` and the absence of `fvar` instead, and fails the build if a
-package is ever shipped un-instanced again.
+Why three and not nine: a spreadsheet cell is bold or it is not, so Regular and
+Bold are the two the grid can ask for. Thin is built because it is the weight
+the un-instanced build produced *by accident* — having it on purpose keeps
+hairline available to anyone who wants it, and costs one more instancing pass.
+
+harfbuzz updates `OS/2.usWeightClass` when it instances but does **not** rewrite
+the `name` table, so all three faces would otherwise call themselves
+`NotoSansJP-Thin` — and a PDF's `/BaseFont` would repeat it, which is exactly
+the symptom people reported. `scripts/nameTable.mjs` rebuilds the `name` table
+(and with it the sfnt directory and checksums) so each face reports its own
+weight. `npm run verify` re-reads every emitted face and checks
+`OS/2.usWeightClass`, the absence of `fvar`, and the PostScript name.
 
 ## What is in a subset
 

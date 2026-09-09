@@ -8,12 +8,16 @@
 //      a subsetter tuned for PDF embedding (as pdf-creator's is) drops it — that
 //      output cannot be re-parsed at all.
 //   2. Every character we claim to ship resolves to a real glyph, not `.notdef`.
-//   3. The font is a *static* instance at the intended weight. Upstream is a
+//   3. Each face is a *static* instance at its intended weight. Upstream is a
 //      variable font whose `wght` default is 100, and a consumer that embeds
 //      `glyf` without applying `gvar` — ReoGrid's PDF export does exactly that —
 //      renders hairline Thin. Shipping an un-instanced subset is the silent
 //      failure this file exists to catch: it passes every glyph check and still
 //      produces unreadable documents.
+//   4. Each face *says* which weight it is. `scripts/nameTable.mjs` rebuilds the
+//      `name` table because harfbuzz does not, and a rebuild that corrupted the
+//      sfnt would be caught by 1-3 — but one that merely wrote the wrong string
+//      would not, and the PostScript name is what lands in a PDF `/BaseFont`.
 //
 // Deliberately dependency-free: a verifier that trusts the same library as the
 // builder is not a verifier. This reads the sfnt tables directly.
@@ -22,7 +26,8 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FONTS, WEIGHT, charsetFor } from '../fonts.config.mjs';
+import { FONTS, WEIGHTS, charsetFor } from '../fonts.config.mjs';
+import { readName } from './nameTable.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -120,67 +125,80 @@ let failed = 0;
 
 for (const font of FONTS) {
   const dir = join(ROOT, 'packages', font.dir);
-  if (!existsSync(join(dir, 'data.js'))) {
+  const { default: loader, FILES } = await import(join(dir, 'index.js')).catch(() => ({}));
+  if (!loader) {
     console.error(`✗ ${font.pkg}: not built — run \`npm run build\` first`);
     failed += 1;
     continue;
   }
 
-  const { default: loader } = await import(join(dir, 'index.js'));
-  const bytes = await loader();
-
-  try {
-    const cmap = readCmap(bytes);
-    const declared = [...charsetFor(font.charset)];
-
-    // The bar is what the *upstream font* could supply, not what the encoding
-    // defines: a handful of code points in every legacy repertoire (box drawing,
-    // some symbol rows) were never drawn by Noto, and demanding them would fail
-    // a subset that lost nothing. Anything upstream had, the subset must keep.
-    const upstreamPath = join(ROOT, '.cache', `${font.upstream.dir}.ttf`);
-    if (!existsSync(upstreamPath)) {
-      console.error(`✗ ${font.pkg}: upstream not cached — run \`npm run build\` first`);
-      failed += 1;
-      continue;
-    }
-    const upstream = readCmap(await readFile(upstreamPath));
-    const expected = declared.filter((c) => upstream.has(c.codePointAt(0)));
-    const absentUpstream = declared.length - expected.length;
-
-    const missing = expected.filter((c) => !cmap.has(c.codePointAt(0)));
-    const spot = [...SPOT_CHECKS[font.tag]].filter((c) => !cmap.has(c.codePointAt(0)));
-    const { weight, variable } = readWeight(bytes);
-    const wrongWeight = weight !== WEIGHT || variable;
-
-    if (missing.length || spot.length || wrongWeight) {
-      console.error(
-        `✗ ${font.pkg}: ` +
-          [
-            missing.length &&
-              `${missing.length}/${expected.length} chars lost in subsetting (e.g. ${missing.slice(0, 12).join('')})`,
-            spot.length && `spot-check dropped: ${spot.join('')}`,
-            variable && 'still a variable font (`fvar` present) — the axis was not pinned, so it draws at the wght default (100 = Thin)',
-            weight !== WEIGHT && `usWeightClass ${weight}, expected ${WEIGHT}`,
-          ]
-            .filter(Boolean)
-            .join('; '),
-      );
-      failed += 1;
-    } else {
-      console.log(
-        `✓ ${font.pkg.padEnd(20)} ${String(expected.length).padStart(6)} chars kept, ` +
-          `${String((bytes.length / 1024).toFixed(0)).padStart(5)} KB   wght ${weight}` +
-          (absentUpstream ? `   (${absentUpstream} not in upstream)` : ''),
-      );
-    }
-  } catch (error) {
-    console.error(`✗ ${font.pkg}: ${error.message}`);
+  // The bar for glyph coverage is what the *upstream font* could supply, not
+  // what the encoding defines: a handful of code points in every legacy
+  // repertoire (box drawing, some symbol rows) were never drawn by Noto, and
+  // demanding them would fail a subset that lost nothing.
+  const upstreamPath = join(ROOT, '.cache', `${font.upstream.dir}.ttf`);
+  if (!existsSync(upstreamPath)) {
+    console.error(`✗ ${font.pkg}: upstream not cached — run \`npm run build\` first`);
     failed += 1;
+    continue;
+  }
+  const upstream = readCmap(await readFile(upstreamPath));
+  const declared = [...charsetFor(font.charset)];
+  const expected = declared.filter((c) => upstream.has(c.codePointAt(0)));
+  const absentUpstream = declared.length - expected.length;
+
+  console.log(`\n▸ ${font.pkg}`);
+
+  for (const weight of WEIGHTS) {
+    const label = `${weight.style} (${weight.key})`;
+    try {
+      if (!existsSync(join(dir, FILES[weight.key]))) {
+        throw new Error(`${FILES[weight.key]} missing from the package`);
+      }
+      const bytes = await loader(weight.key);
+
+      const cmap = readCmap(bytes);
+      const missing = expected.filter((c) => !cmap.has(c.codePointAt(0)));
+      const spot = [...SPOT_CHECKS[font.tag]].filter((c) => !cmap.has(c.codePointAt(0)));
+      const { weight: usWeight, variable } = readWeight(bytes);
+
+      // What a PDF's /BaseFont will say. Checked against the style we asked
+      // for, because "it renders Bold but calls itself Thin" is the exact
+      // confusion the rename exists to end.
+      const postScript = readName(bytes, 6);
+      const wantPostScript = `${font.family.replace(/\s+/g, '')}-${weight.style}`;
+
+      const problems = [
+        missing.length &&
+          `${missing.length}/${expected.length} chars lost in subsetting (e.g. ${missing.slice(0, 12).join('')})`,
+        spot.length && `spot-check dropped: ${spot.join('')}`,
+        variable &&
+          'still a variable font (`fvar` present) — the axis was not pinned, so it draws at the wght default (100 = Thin)',
+        usWeight !== weight.wght && `usWeightClass ${usWeight}, expected ${weight.wght}`,
+        postScript !== wantPostScript &&
+          `PostScript name '${postScript}', expected '${wantPostScript}' — the name rewrite did not take`,
+      ].filter(Boolean);
+
+      if (problems.length) {
+        console.error(`  ✗ ${label.padEnd(18)} ${problems.join('; ')}`);
+        failed += 1;
+      } else {
+        console.log(
+          `  ✓ ${label.padEnd(18)} ${String(expected.length).padStart(6)} chars kept, ` +
+            `${String((bytes.length / 1024).toFixed(0)).padStart(5)} KB   ` +
+            `wght ${String(usWeight).padStart(3)}   ${postScript}` +
+            (absentUpstream ? `   (${absentUpstream} not in upstream)` : ''),
+        );
+      }
+    } catch (error) {
+      console.error(`  ✗ ${label.padEnd(18)} ${error.message}`);
+      failed += 1;
+    }
   }
 }
 
 if (failed) {
-  console.error(`\n${failed} package(s) failed verification.`);
+  console.error(`\n${failed} face(s) failed verification.`);
   process.exit(1);
 }
-console.log('\nAll packages verified.');
+console.log('\nAll faces verified.');

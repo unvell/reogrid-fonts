@@ -15,7 +15,7 @@ export const upstreamUrl = (dir, file) =>
   `https://cdn.jsdelivr.net/gh/google/fonts@${GOOGLE_FONTS_SHA}/ofl/${dir}/${file}`;
 
 /**
- * The weight to pin the variable font to, as a `wght` axis coordinate.
+ * The weights we build, as `wght` axis coordinates.
  *
  * This is **not** cosmetic — it decides whether the packages are usable at all.
  * Upstream ships `NotoSansXX[wght].ttf`, whose `fvar` declares
@@ -26,15 +26,37 @@ export const upstreamUrl = (dir, file) =>
  * came out uniformly hairline, and the synthetic bold (a 4% outline stroke in
  * `worksheetPdf.ts`) had nothing solid to thicken.
  *
- * Pinning here bakes the 400 outlines into `glyf` and drops `fvar`/`gvar`
- * entirely, so the packaged font is a plain static Regular.
+ * Instancing here bakes each weight's outlines into `glyf` and drops
+ * `fvar`/`gvar` entirely, so every packaged font is a plain static face.
  *
- * Note: harfbuzz does not rewrite the `name` table when instancing, so the
- * packaged font still reports `NotoSansJP-Thin` as its PostScript name and a
- * PDF's `/BaseFont` will say so too. The outlines are 400 — verify with
- * `usWeightClass` (`scripts/verify.mjs`), not with the name.
+ * Three weights, not nine: a spreadsheet cell is bold or it is not, so `normal`
+ * and `bold` are what the grid can actually ask for. `thin` is built because it
+ * is the weight the bug used to produce by accident — having it on purpose
+ * means "hairline" stays available to anyone who wants it, and costs one more
+ * instancing pass.
+ *
+ * `style` is what the face calls itself once `scripts/nameTable.mjs` has
+ * rewritten `name` (harfbuzz leaves that table alone when instancing, so
+ * without the rewrite all three would report `NotoSansJP-Thin` — and PDF
+ * `/BaseFont` would say so too).
  */
-export const WEIGHT = 400;
+export const WEIGHTS = [
+  { key: 'thin', wght: 100, style: 'Thin' },
+  { key: 'normal', wght: 400, style: 'Regular' },
+  { key: 'bold', wght: 700, style: 'Bold' },
+];
+
+/** The weight a bare `loadNotoSansXX()` resolves to. */
+export const DEFAULT_WEIGHT = 'normal';
+
+/** Look up a weight descriptor by key, failing loudly on a typo. */
+export function weightByKey(key) {
+  const found = WEIGHTS.find((w) => w.key === key);
+  if (!found) {
+    throw new Error(`unknown weight '${key}' — known: ${WEIGHTS.map((w) => w.key).join(', ')}`);
+  }
+  return found;
+}
 
 /**
  * Character sets are generated from the classic national encodings rather than
